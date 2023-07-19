@@ -4,12 +4,11 @@ import argparse
 import numpy as np
 from pathlib import Path
 from matplotlib import pyplot as plt
-
 from sam_segment import predict_masks_with_sam
 from lama_inpaint import inpaint_img_with_lama
 from utils import load_img_to_array, save_array_to_img, dilate_mask, \
     show_mask, show_points, get_clicked_point
-
+import time
 
 def setup_args(parser):
     parser.add_argument(
@@ -82,7 +81,7 @@ if __name__ == "__main__":
     elif args.coords_type == "key_in":
         latest_coords = args.point_coords
     img = load_img_to_array(args.input_img)
-
+    t1 = time.perf_counter()
     masks, _, _ = predict_masks_with_sam(
         img,
         [latest_coords],
@@ -91,12 +90,12 @@ if __name__ == "__main__":
         ckpt_p=args.sam_ckpt,
         device=device,
     )
+    t2=time.perf_counter()
     masks = masks.astype(np.uint8) * 255
-
+    print(f"Processing SAM Time {t2 - t1:0.4f} seconds")
     # dilate mask to avoid unmasked edge effect
     if args.dilate_kernel_size is not None:
         masks = [dilate_mask(mask, args.dilate_kernel_size) for mask in masks]
-
     # visualize the segmentation results
     img_stem = Path(args.input_img).stem
     out_dir = Path(args.output_dir) / img_stem
@@ -122,11 +121,13 @@ if __name__ == "__main__":
         show_mask(plt.gca(), mask, random_color=False)
         plt.savefig(img_mask_p, bbox_inches='tight', pad_inches=0)
         plt.close()
-
     # inpaint the masked image
+    t3=time.perf_counter() 
     for idx, mask in enumerate(masks):
         mask_p = out_dir / f"mask_{idx}.png"
         img_inpainted_p = out_dir / f"inpainted_with_{Path(mask_p).name}"
         img_inpainted = inpaint_img_with_lama(
             img, mask, args.lama_config, args.lama_ckpt, device=device)
         save_array_to_img(img_inpainted, img_inpainted_p)
+    t4=time.perf_counter()
+    print(f"Processing LAMA Time {t4 - t3:0.4f} seconds")
